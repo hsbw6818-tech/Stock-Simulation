@@ -1,0 +1,16 @@
+{
+  "name": "realtime-stock-battle",
+  "version": "5.0.0",
+  "description": "Node.js + localStorage 기반 실시간 주식 모의투자 경쟁 프로그램 (Render Free 호환)",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
