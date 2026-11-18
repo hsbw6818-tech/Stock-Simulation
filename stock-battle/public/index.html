@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>실시간 주식 모의투자 경쟁</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --card-inner: #0f172a;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --up: #ef4444;
+      --down: #3b82f6;
+      --accent: #10b981;
+      --primary: #6366f1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 20px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    /* 입장 화면 */
+    #loginBox {
+      max-width: 450px; margin: 90px auto; background: var(--card);
+      padding: 32px; border-radius: 12px; border: 1px solid var(--border); text-align: center;
+    }
+    #loginBox h1 { font-size: 1.5rem; margin-bottom: 10px; }
+    #loginBox p { color: var(--muted); font-size: 0.9rem; margin-bottom: 18px; line-height: 1.65; }
+    .storage-pill {
+      display: inline-block; background: #064e3b; color: #6ee7b7; border: 1px solid #059669;
+      font-size: 0.78rem; padding: 4px 10px; border-radius: 999px; margin-bottom: 16px;
+    }
+    input[type="text"], input[type="number"] {
+      width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--card-inner); color: var(--text); font-size: 0.95rem;
+    }
+    #nicknameInput { margin-bottom: 12px; }
+    button {
+      padding: 10px 16px; border: none; border-radius: 8px; font-weight: bold;
+      cursor: pointer; transition: 0.15s; font-size: 0.92rem;
+    }
+    button:hover { opacity: 0.9; }
+    .btn-primary { width: 100%; background: var(--accent); color: #052e16; }
+
+    /* 대시보드 */
+    #dashboard { display: none; }
+    .top-bar {
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+      background: var(--card); padding: 16px 20px; border-radius: 12px; border: 1px solid var(--border);
+      margin-bottom: 14px; gap: 10px;
+    }
+    .badge {
+      display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem;
+      background: #334155; color: #e2e8f0; margin-left: 6px;
+    }
+    .badge-host { background: #0284c7; color: #e0f2fe; font-weight: bold; }
+    .badge-storage { background: #064e3b; color: #6ee7b7; }
+    .badge-kr { background: #1e3a8a; color: #93c5fd; font-size: 0.72rem; padding: 2px 7px; border-radius: 6px; }
+    .badge-us { background: #4c1d95; color: #ddd6fe; font-size: 0.72rem; padding: 2px 7px; border-radius: 6px; }
+
+    .notice-banner {
+      background: #172554; border: 1px solid #1d4ed8; color: #93c5fd;
+      padding: 10px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; line-height: 1.5;
+    }
+
+    .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+    @media (max-width: 840px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px; margin-bottom: 16px;
+    }
+    .card h2 { font-size: 1.08rem; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    @media (max-width: 600px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+    .stat-box { background: var(--card-inner); padding: 12px; border-radius: 8px; }
+    .stat-label { font-size: 0.78rem; color: var(--muted); margin-bottom: 4px; }
+    .stat-val { font-size: 1.05rem; font-weight: bold; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { padding: 11px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
+    .up { color: var(--up); }
+    .down { color: var(--down); }
+
+    .rank-pill {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 24px; height: 24px; border-radius: 50%; font-size: 0.8rem; font-weight: bold;
+      background: #334155; color: #f8fafc;
+    }
+    .rank-pill-1 { background: #f59e0b; color: #451a03; }
+    .rank-pill-2 { background: #cbd5e1; color: #0f172a; }
+    .rank-pill-3 { background: #b45309; color: #fef3c7; }
+
+    .btn-manage {
+      width: 100%; margin-top: 14px; padding: 13px;
+      background: var(--primary); color: #ffffff; font-size: 1rem;
+      border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+
+    .rank-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 12px; background: var(--card-inner); border-radius: 8px; margin-bottom: 8px;
+    }
+    .rank-1 { border: 1px solid #f59e0b; }
+
+    /* 단일 토글 스위치 버튼 (국내/해외 및 수익률/총자산 공통 UI) */
+    .market-switch-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #0f172a; border: 1px solid #475569; border-radius: 999px;
+      padding: 4px; cursor: pointer; user-select: none;
+    }
+    .switch-opt {
+      padding: 5px 13px; border-radius: 999px; font-size: 0.82rem; font-weight: bold;
+      color: var(--muted); transition: 0.2s;
+    }
+    .switch-opt.active-left { background: #2563eb; color: #ffffff; }
+    .switch-opt.active-right { background: #7c3aed; color: #ffffff; }
+
+    /* 내 주식 관리 모달 */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(2, 6, 23, 0.82);
+      z-index: 1000; justify-content: center; align-items: center; padding: 16px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      width: 100%; max-width: 980px; max-height: 90vh; overflow-y: auto; padding: 24px;
+    }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+      border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 18px;
+    }
+    .modal-close {
+      background: #334155; color: var(--text); padding: 6px 12px; font-size: 0.85rem;
+    }
+    .modal-section {
+      background: var(--card-inner); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; margin-bottom: 18px;
+    }
+    .modal-section h3 {
+      font-size: 1rem; margin-bottom: 12px; color: #e2e8f0;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+    }
+
+    .market-toolbar {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center;
+    }
+    .market-toolbar input { flex: 1; min-width: 180px; padding: 9px 12px; font-size: 0.9rem; }
+    .btn-outline {
+      background: #1e293b; border: 1px solid #475569; color: #e2e8f0;
+      padding: 9px 14px; font-size: 0.85rem;
+    }
+    .btn-outline.active {
+      background: var(--accent); border-color: var(--accent); color: #052e16;
+    }
+
+    .trade-controls { display: flex; gap: 4px; align-items: center; }
+    .trade-input { width: 62px !important; padding: 6px !important; text-align: center; font-size: 0.85rem !important; }
+    .btn-buy { background: var(--up); color: white; padding: 6px 10px; font-size: 0.82rem; }
+    .btn-sell { background: var(--down); color: white; padding: 6px 10px; font-size: 0.82rem; }
+    .btn-sell-all { background: #475569; color: white; padding: 6px 8px; font-size: 0.78rem; }
+
+    .history-list {
+      max-height: 180px; overflow-y: auto; font-size: 0.82rem;
+    }
+    .history-row {
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;
+      padding: 8px 10px; border-bottom: 1px solid #1e293b;
+    }
+
+    .toast {
+      position: fixed; bottom: 20px; right: 20px; background: #10b981; color: #052e16;
+      padding: 10px 16px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;
+      display: none; z-index: 2000; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- 입장 화면 -->
+    <div id="loginBox">
+      <h1>📈 실시간 주식 경쟁</h1>
+      <div class="storage-pill">💾 모든 자산·보유 주식·출석 기록은 브라우저 로컬 스토리지에 자동 저장됩니다</div>
+      <p>
+        신규 가입 시 기본 지원금 <strong style="color:var(--accent);">1,000,000원</strong> 즉시 지급!<br/>
+        매일 출석 시 <strong>10,000원</strong> 추가 지급 (<strong>3일 연속 출석</strong>부터 매일 <strong>20,000원</strong>)<br/>
+        빈 방에 처음 접속한 유저가 방을 열고, 접속 중인 유저끼리 수익률·총자산 랭킹을 겨룹니다.
+      </p>
+      <input type="text" id="nicknameInput" placeholder="사용할 닉네임 입력" maxlength="12" />
+      <button class="btn-primary" onclick="joinGame()">방 입장하기</button>
+    </div>
+
+    <!-- 메인 대시보드 -->
+    <div id="dashboard">
+      <div class="top-bar">
+        <div>
+          <strong id="myNickDisplay" style="font-size:1.1rem;"></strong>
+          <span id="hostBadge" class="badge badge-host" style="display:none;">방 주인 (통신 호스트)</span>
+          <span class="badge badge-storage">💾 로컬 스토리지 동기화됨</span>
+          <span class="badge">기준일: <span id="serverDate">-</span></span>
+          <span class="badge">현재 방 주인: <span id="roomHostDisplay">-</span></span>
+        </div>
+        <div style="font-size:0.85rem; color:var(--muted);">
+          보유 현금: <strong id="topCashVal" style="color:var(--accent);">0원</strong>
+        </div>
+      </div>
+
+      <div id="noticeBanner" class="notice-banner">거래소에 오신 것을 환영합니다! 주가는 2초마다 실시간으로 변동됩니다.</div>
+
+      <!-- 내 자산 및 출석 정보 -->
+      <div class="card">
+        <h2>내 자산 및 출석 정보</h2>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-label">총자산 (내 수익률)</div>
+            <div class="stat-val" id="totalAssetVal" style="color:var(--accent);">0원</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">보유 현금</div>
+            <div class="stat-val" id="cashVal">0원</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">연속 출석</div>
+            <div class="stat-val" id="streakVal">0일차</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">마지막 접속 일자</div>
+            <div class="stat-val" id="lastLoginVal">-</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <!-- 실시간 주식 시장 (TOP 3만 표시 + 내 주식 관리 버튼) -->
+        <div class="card">
+          <h2>
+            <span>🔥 실시간 주식 시장 TOP 3</span>
+            <span style="font-size:0.78rem; color:var(--muted); font-weight:normal;">현재가 상위 3개 종목</span>
+          </h2>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>순위</th>
+                  <th>구분</th>
+                  <th>종목명</th>
+                  <th>현재가</th>
+                  <th>내 보유</th>
+                </tr>
+              </thead>
+              <tbody id="top3TableBody"></tbody>
+            </table>
+          </div>
+          <button class="btn-manage" onclick="openManageModal()">
+            📊 내 주식 관리 (보유 주식 매도 · 국내/해외 주식 구매)
+          </button>
+        </div>
+
+        <!-- 현재 접속자 실시간 랭킹 (수익률 / 총자산 스위치 전환) -->
+        <div class="card">
+          <h2>
+            <span>🏆 실시간 랭킹 (<span id="onlineCount">0</span>명)</span>
+            <!-- 국내/해외 스위치와 동일한 UI의 수익률 / 총자산 토글 스위치 -->
+            <button type="button" class="market-switch-btn" onclick="toggleRankingMode()" title="클릭하여 수익률/총자산 랭킹 전환">
+              <span id="switchRankReturn" class="switch-opt active-left">📈 수익률</span>
+              <span id="switchRankAssets" class="switch-opt">💰 총자산</span>
+            </button>
+          </h2>
+          <p id="rankingDesc" style="font-size:0.8rem; color:var(--muted); margin-bottom:12px;">
+            현재 방에 접속 중인 인원만 수익률 순으로 표시됩니다.
+          </p>
+          <div id="rankingList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 내 주식 관리 모달 -->
+  <div id="manageModal" class="modal-overlay" onclick="handleOverlayClick(event)">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <strong style="font-size:1.2rem;">📊 내 주식 관리</strong>
+          <span style="font-size:0.88rem; color:var(--muted); margin-left:10px;">
+            주문 가능 현금: <strong id="modalCashVal" style="color:var(--accent);">0원</strong>
+          </span>
+        </div>
+        <button class="modal-close" onclick="closeManageModal()">닫기 ✕</button>
+      </div>
+
+      <!-- 1. 현재 내 소유의 주식 확인 및 매도 (종류, 이름, 코드, 구매 가격, 개수, 총 매수금액 모두 기록/표시) -->
+      <div class="modal-section">
+        <h3>
+          <span>💼 내 보유 주식 (로컬 스토리지 기록 · 확인 및 매도)</span>
+          <span id="ownedCountLabel" style="font-size:0.82rem; color:var(--muted); font-weight:normal;">0종목 보유 중</span>
+        </h3>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>종류</th>
+                <th>이름 (코드)</th>
+                <th>보유 개수</th>
+                <th>구매 가격 (평단가)</th>
+                <th>총 매수금액</th>
+                <th>현재가</th>
+                <th>수익률</th>
+                <th>매도</th>
+              </tr>
+            </thead>
+            <tbody id="ownedStocksBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 2. 새 주식 구매 (국내/해외 단일 스위치 + 랜덤 10개 + 전체보기/검색) -->
+      <div class="modal-section">
+        <h3>
+          <span>🛒 새 주식 구매</span>
+          <!-- 국내 / 해외 단일 토글 스위치 버튼 -->
+          <button type="button" class="market-switch-btn" onclick="toggleMarket()" title="클릭하여 국내/해외 시장 전환">
+            <span id="switchKR" class="switch-opt active-left">🇰🇷 국내</span>
+            <span id="switchUS" class="switch-opt">🇺🇸 해외</span>
+          </button>
+        </h3>
+
+        <div class="market-toolbar">
+          <input
+            type="text"
+            id="stockSearchInput"
+            placeholder="종목명 또는 티커 검색 (예: 삼성, 엔비디아, TSLA...)"
+            oninput="renderModal()"
+          />
+          <button type="button" id="reshuffleBtn" class="btn-outline" onclick="reshuffleRandom10()">🎲 랜덤 10개 다시뽑기</button>
+          <button type="button" id="showAllBtn" class="btn-outline" onclick="toggleShowAll()">전체보기</button>
+        </div>
+
+        <div id="marketFilterInfo" style="font-size:0.8rem; color:var(--muted); margin-bottom:10px;"></div>
+
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>종류</th>
+                <th>이름 (코드)</th>
+                <th>현재가</th>
+                <th>보유 개수</th>
+                <th>구매 (수량)</th>
+              </tr>
+            </thead>
+            <tbody id="marketStocksBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 3. 로컬 스토리지 매매 거래 기록 -->
+      <div class="modal-section" style="margin-bottom:0;">
+        <h3>
+          <span>🧾 최근 거래 기록 (로컬 스토리지 저장 내역)</span>
+          <span id="historyCountLabel" style="font-size:0.8rem; color:var(--muted); font-weight:normal;">0건</span>
+        </h3>
+        <div id="tradeHistoryList" class="history-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const socket = io();
+    const STORAGE_PREFIX = 'stockBattle_v5_profile_';
+    const LAST_NICK_KEY = 'stockBattle_v5_lastNick';
+
+    let myNickname = '';
+    let myUser = null;
+    let myTradeHistory = [];
+    let currentStocks = {};
+    let latestRanking = [];
+
+    // 랭킹 스위치 상태: 'RETURN' (수익률) | 'ASSETS' (총자산)
+    let rankingMode = 'RETURN';
+
+    // 내 주식 관리 모달 상태
+    let selectedMarket = 'KR'; // 'KR' (국내) | 'US' (해외)
+    let showAllStocks = false; // false: 랜덤 10개 기본 노출, true: 전체보기
+    let randomSampleIds = { KR: [], US: [] };
+
+    // 이전 접속 닉네임 자동 채우기
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedNick = localStorage.getItem(LAST_NICK_KEY);
+      if (savedNick) {
+        document.getElementById('nicknameInput').value = savedNick;
+      }
+    });
+
+    function getStorageKey(nickname) {
+      return STORAGE_PREFIX + nickname;
+    }
+
+    // 브라우저 localStorage에서 유저 데이터(현금, 출석, 보유 주식 상세, 거래내역) 불러오기
+    function loadProfileFromLocal(nickname) {
+      try {
+        const raw = localStorage.getItem(getStorageKey(nickname));
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (e) {
+        console.error('localStorage 읽기 오류:', e);
+        return null;
+      }
+    }
+
+    // 브라우저 localStorage에 유저 데이터(종류, 이름, 코드, 구매 가격, 개수, 거래 기록 등) 영구 저장
+    function saveProfileToLocal(nickname, userObj, tradeHistoryArr) {
+      try {
+        const payload = {
+          nickname,
+          cash: userObj.cash,
+          totalPrincipal: userObj.totalPrincipal,
+          lastLoginDate: userObj.lastLoginDate,
+          streak: userObj.streak,
+          portfolio: userObj.portfolio || {},
+          tradeHistory: Array.isArray(tradeHistoryArr) ? tradeHistoryArr.slice(0, 100) : [],
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(getStorageKey(nickname), JSON.stringify(payload));
+        localStorage.setItem(LAST_NICK_KEY, nickname);
+      } catch (e) {
+        console.error('localStorage 저장 오류:', e);
+        alert('브라우저 로컬 스토리지 저장에 실패했습니다. 저장 공간을 확인해주세요.');
+      }
+    }
+
+    function formatKRW(num) {
+      return Math.round(num).toLocaleString('ko-KR') + '원';
+    }
+
+    function formatRate(rate) {
+      const val = Number(rate) || 0;
+      return `${val > 0 ? '+' : ''}${val.toFixed(2)}%`;
+    }
+
+    function formatTime(isoStr) {
+      if (!isoStr) return '-';
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '-';
+      return d.toLocaleString('ko-KR', {
+        month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.innerText = msg;
+      t.style.display = 'block';
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => { t.style.display = 'none'; }, 2400);
+    }
+
+    function pickRandom10(market) {
+      const list = Object.values(currentStocks).filter(s => s.market === market);
+      const shuffled = [...list].sort(() => Math.random() - 0.5);
+      randomSampleIds[market] = shuffled.slice(0, 10).map(s => s.id);
+    }
+
+    function ensureRandomSamples() {
+      if (randomSampleIds.KR.length === 0) pickRandom10('KR');
+      if (randomSampleIds.US.length === 0) pickRandom10('US');
+    }
+
+    function joinGame() {
+      const nick = document.getElementById('nicknameInput').value.trim();
+      if (!nick) return alert('닉네임을 입력하세요.');
+
+      // localStorage에 저장된 기존 자산 및 보유 주식 목록을 함께 서버에 전달해 방 세션에 동기화
+      const storedData = loadProfileFromLocal(nick);
+      myTradeHistory = (storedData && Array.isArray(storedData.tradeHistory)) ? storedData.tradeHistory : [];
+
+      socket.emit('join', {
+        nickname: nick,
+        profile: storedData
+      });
+    }
+
+    document.getElementById('nicknameInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') joinGame();
+    });
+
+    // Render 무료 서버 슬립 해제/재연결 시 localStorage 데이터로 자동 재입장
+    socket.on('connect', () => {
+      if (myNickname && myUser) {
+        const storedData = loadProfileFromLocal(myNickname) || myUser;
+        socket.emit('join', {
+          nickname: myNickname,
+          profile: storedData
+        });
+      }
+    });
+
+    socket.on('errorMsg', (msg) => alert(msg));
+    socket.on('tradeSuccess', (msg) => showToast(msg));
+
+    socket.on('joined', ({ nickname, user, stocks, initialSupport, attendanceLog, isHost, joinRoleMsg }) => {
+      myNickname = nickname;
+      myUser = user;
+      currentStocks = stocks;
+      ensureRandomSamples();
+
+      // 서버가 판정한 출석 보상/신규 지원금 반영 결과를 즉시 localStorage에 영구 저장
+      saveProfileToLocal(myNickname, myUser, myTradeHistory);
+
+      document.getElementById('loginBox').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      document.getElementById('myNickDisplay').innerText = nickname;
+
+      document.getElementById('hostBadge').style.display = isHost ? 'inline-block' : 'none';
+
+      let messages = [joinRoleMsg];
+      if (initialSupport > 0) {
+        messages.push(`💰 신규 가입 기본 지원금 ${formatKRW(initialSupport)}이 지급되었습니다!`);
+      }
+      if (attendanceLog.rewarded) {
+        const bonusText = attendanceLog.streak >= 3 ? ' (3일 연속 출석 2배 보너스!)' : '';
+        messages.push(`🎉 출석 완료! ${attendanceLog.streak}일 연속 접속으로 ${formatKRW(attendanceLog.reward)}이 추가 지급되었습니다.${bonusText}`);
+      } else {
+        messages.push(`오늘(${attendanceLog.prevLoginDate}) 출석 보상은 이미 수령했습니다. (연속 ${attendanceLog.streak}일차)`);
+      }
+      document.getElementById('noticeBanner').innerText = messages.join(' ');
+
+      renderAll();
+    });
+
+    socket.on('hostAssigned', () => {
+      document.getElementById('hostBadge').style.display = 'inline-block';
+    });
+
+    socket.on('userUpdate', ({ user, tradeRecord }) => {
+      myUser = user;
+      if (tradeRecord) {
+        myTradeHistory.unshift(tradeRecord);
+        if (myTradeHistory.length > 100) myTradeHistory.length = 100;
+      }
+      // 매수/매도 직후 구매 가격, 종류, 이름, 개수, 현금, 거래기록 모두 localStorage에 즉시 저장
+      saveProfileToLocal(myNickname, myUser, myTradeHistory);
+      renderAll();
+    });
+
+    socket.on('stockUpdate', (stocks) => {
+      currentStocks = stocks;
+      ensureRandomSamples();
+      if (myUser) renderAll();
+    });
+
+    socket.on('systemNotice', (msg) => {
+      document.getElementById('noticeBanner').innerText = msg;
+    });
+
+    socket.on('roomUpdate', ({ hostNickname, onlineCount, ranking, currentDate }) => {
+      document.getElementById('onlineCount').innerText = onlineCount;
+      document.getElementById('serverDate').innerText = currentDate;
+      document.getElementById('roomHostDisplay').innerText = hostNickname || '-';
+      latestRanking = ranking || [];
+      renderRanking();
+    });
+
+    // 랭킹 스위치 (수익률 <-> 총자산) 전환
+    function toggleRankingMode() {
+      rankingMode = rankingMode === 'RETURN' ? 'ASSETS' : 'RETURN';
+      renderRanking();
+    }
+
+    function renderRanking() {
+      const swReturn = document.getElementById('switchRankReturn');
+      const swAssets = document.getElementById('switchRankAssets');
+      const descEl = document.getElementById('rankingDesc');
+
+      swReturn.className = 'switch-opt' + (rankingMode === 'RETURN' ? ' active-left' : '');
+      swAssets.className = 'switch-opt' + (rankingMode === 'ASSETS' ? ' active-right' : '');
+
+      if (rankingMode === 'RETURN') {
+        descEl.innerText = '현재 방에 접속 중인 인원만 수익률 순으로 표시됩니다.';
+      } else {
+        descEl.innerText = '현재 방에 접속 중인 인원만 총자산 순으로 표시됩니다.';
+      }
+
+      const sorted = [...latestRanking].sort((a, b) => {
+        if (rankingMode === 'RETURN') {
+          if (Math.abs(b.returnRate - a.returnRate) > 1e-6) {
+            return b.returnRate - a.returnRate;
+          }
+          return b.totalAssets - a.totalAssets;
+        } else {
+          return b.totalAssets - a.totalAssets;
+        }
+      });
+
+      const listEl = document.getElementById('rankingList');
+      listEl.innerHTML = sorted.map((r, idx) => {
+        const rateClass = r.returnRate > 0 ? 'up' : r.returnRate < 0 ? 'down' : '';
+        const rightMainValue = rankingMode === 'RETURN'
+          ? `<span class="${rateClass}">${formatRate(r.returnRate)}</span>`
+          : `<span style="color:var(--accent);">${formatKRW(r.totalAssets)}</span>`;
+
+        const subInfo = rankingMode === 'RETURN'
+          ? `총자산 ${formatKRW(r.totalAssets)} · 연속 ${r.streak}일`
+          : `수익률 <span class="${rateClass}">${formatRate(r.returnRate)}</span> · 연속 ${r.streak}일`;
+
+        return `
+          <div class="rank-item ${idx === 0 ? 'rank-1' : ''}">
+            <div>
+              <strong>${idx + 1}위. ${r.nickname}</strong>
+              ${r.isHost ? '<span class="badge badge-host" style="font-size:0.7rem;">방 주인</span>' : ''}
+              <div style="font-size:0.78rem; color:var(--muted); margin-top:2px;">
+                ${subInfo}
+              </div>
+            </div>
+            <div style="font-weight:bold; font-size:0.98rem;">
+              ${rightMainValue}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderAll() {
+      if (!myUser) return;
+
+      let stockTotal = 0;
+      if (myUser.portfolio) {
+        for (const [id, h] of Object.entries(myUser.portfolio)) {
+          if (currentStocks[id] && h && h.qty > 0) {
+            stockTotal += h.qty * currentStocks[id].price;
+          }
+        }
+      }
+
+      const totalAssets = myUser.cash + stockTotal;
+      const principal = (typeof myUser.totalPrincipal === 'number' && myUser.totalPrincipal > 0)
+        ? myUser.totalPrincipal
+        : 1000000;
+      const myReturnRate = ((totalAssets - principal) / principal) * 100;
+      const myRateClass = myReturnRate > 0 ? 'up' : myReturnRate < 0 ? 'down' : '';
+
+      document.getElementById('totalAssetVal').innerHTML =
+        `${formatKRW(totalAssets)} <small class="${myRateClass}" style="font-size:0.85rem;">(${formatRate(myReturnRate)})</small>`;
+      document.getElementById('cashVal').innerText = formatKRW(myUser.cash);
+      document.getElementById('topCashVal').innerText = formatKRW(myUser.cash);
+      document.getElementById('streakVal').innerText = `${myUser.streak}일차 ${myUser.streak >= 3 ? '(2배 적용중)' : ''}`;
+      document.getElementById('lastLoginVal').innerText = myUser.lastLoginDate || '-';
+
+      // 1. 메인 대시보드: 주식 시장은 상위 3위까지만 표시
+      const top3 = Object.values(currentStocks)
+        .sort((a, b) => b.price - a.price)
+        .slice(0, 3);
+
+      const top3Body = document.getElementById('top3TableBody');
+      top3Body.innerHTML = top3.map((stock, idx) => {
+        const diff = stock.price - stock.prevPrice;
+        const priceClass = diff > 0 ? 'up' : diff < 0 ? 'down' : '';
+        const diffSign = diff > 0 ? '▲' : diff < 0 ? '▼' : '-';
+        const holding = (myUser.portfolio && myUser.portfolio[stock.id]) || { qty: 0 };
+        const marketBadge = stock.market === 'KR'
+          ? '<span class="badge-kr">국내</span>'
+          : '<span class="badge-us">해외</span>';
+
+        return `
+          <tr>
+            <td><span class="rank-pill rank-pill-${idx + 1}">${idx + 1}</span></td>
+            <td>${marketBadge}</td>
+            <td><strong>${stock.name}</strong> <small style="color:var(--muted);">(${stock.code})</small></td>
+            <td class="${priceClass}">${formatKRW(stock.price)} <small>(${diffSign})</small></td>
+            <td>${holding.qty > 0 ? `<strong style="color:var(--accent);">${holding.qty}주</strong>` : '<span style="color:var(--muted);">-</span>'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      if (document.getElementById('manageModal').classList.contains('open')) {
+        renderModal();
+      }
+    }
+
+    // 내 주식 관리 모달 열기 / 닫기
+    function openManageModal() {
+      ensureRandomSamples();
+      document.getElementById('manageModal').classList.add('open');
+      renderModal();
+    }
+
+    function closeManageModal() {
+      document.getElementById('manageModal').classList.remove('open');
+    }
+
+    function handleOverlayClick(e) {
+      if (e.target.id === 'manageModal') closeManageModal();
+    }
+
+    // 국내 / 해외 단일 버튼 스위치
+    function toggleMarket() {
+      selectedMarket = selectedMarket === 'KR' ? 'US' : 'KR';
+      if (randomSampleIds[selectedMarket].length === 0) {
+        pickRandom10(selectedMarket);
+      }
+      renderModal();
+    }
+
+    function reshuffleRandom10() {
+      pickRandom10(selectedMarket);
+      showAllStocks = false;
+      document.getElementById('stockSearchInput').value = '';
+      renderModal();
+    }
+
+    function toggleShowAll() {
+      showAllStocks = !showAllStocks;
+      renderModal();
+    }
+
+    function renderModal() {
+      if (!myUser) return;
+      document.getElementById('modalCashVal').innerText = formatKRW(myUser.cash);
+
+      // 스위치 UI 업데이트
+      const swKR = document.getElementById('switchKR');
+      const swUS = document.getElementById('switchUS');
+      swKR.className = 'switch-opt' + (selectedMarket === 'KR' ? ' active-left' : '');
+      swUS.className = 'switch-opt' + (selectedMarket === 'US' ? ' active-right' : '');
+
+      // 전체보기 버튼 UI 업데이트
+      const showAllBtn = document.getElementById('showAllBtn');
+      const totalMarketCount = Object.values(currentStocks).filter(s => s.market === selectedMarket).length;
+      if (showAllStocks) {
+        showAllBtn.classList.add('active');
+        showAllBtn.innerText = '랜덤 10개만 보기';
+      } else {
+        showAllBtn.classList.remove('active');
+        showAllBtn.innerText = `전체보기 (${totalMarketCount}개)`;
+      }
+
+      // 1) 내 보유 주식 렌더링 (로컬 스토리지에 저장된 종류, 이름, 코드, 구매 가격, 개수, 총 매수금액 표시)
+      const ownedEntries = Object.entries(myUser.portfolio || {})
+        .filter(([id, h]) => currentStocks[id] && h && h.qty > 0);
+
+      document.getElementById('ownedCountLabel').innerText = `${ownedEntries.length}종목 보유 중`;
+      const ownedBody = document.getElementById('ownedStocksBody');
+
+      if (ownedEntries.length === 0) {
+        ownedBody.innerHTML = `
+          <tr>
+            <td colspan="8" style="text-align:center; color:var(--muted); padding:18px;">
+              현재 보유 중인 주식이 없습니다. 아래에서 국내/해외 주식을 구매해보세요!
+            </td>
+          </tr>
+        `;
+      } else {
+        ownedBody.innerHTML = ownedEntries.map(([id, holding]) => {
+          const stock = currentStocks[id];
+          const marketCode = holding.market || stock.market;
+          const stockName = holding.name || stock.name;
+          const stockCode = holding.code || stock.code;
+          const totalBuy = holding.totalBuyAmount || (holding.avgPrice * holding.qty);
+
+          const rate = holding.avgPrice > 0
+            ? ((stock.price - holding.avgPrice) / holding.avgPrice) * 100
+            : 0;
+          const profitClass = rate > 0 ? 'up' : rate < 0 ? 'down' : '';
+          const profitText = `${rate > 0 ? '+' : ''}${rate.toFixed(2)}%`;
+          const marketBadge = marketCode === 'KR'
+            ? '<span class="badge-kr">국내주식</span>'
+            : '<span class="badge-us">해외주식</span>';
+
+          const prevInput = document.getElementById(`sell_qty_${stock.id}`);
+          const prevVal = prevInput ? prevInput.value : '1';
+
+          return `
+            <tr>
+              <td>${marketBadge}</td>
+              <td><strong>${stockName}</strong> <small style="color:var(--muted);">(${stockCode})</small></td>
+              <td><strong>${holding.qty}주</strong></td>
+              <td>${formatKRW(holding.avgPrice)}</td>
+              <td>${formatKRW(totalBuy)}</td>
+              <td>${formatKRW(stock.price)}</td>
+              <td class="${profitClass}"><strong>${profitText}</strong></td>
+              <td>
+                <div class="trade-controls">
+                  <input type="number" id="sell_qty_${stock.id}" class="trade-input" value="${prevVal}" min="1" max="${holding.qty}" />
+                  <button class="btn-sell" onclick="sellStock('${stock.id}')">매도</button>
+                  <button class="btn-sell-all" onclick="sellAllStock('${stock.id}', ${holding.qty})">전량</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // 2) 새 주식 구매 목록 필터링 (국내/해외 + 검색어 / 전체보기 / 랜덤 10개)
+      const keyword = document.getElementById('stockSearchInput').value.trim().toLowerCase();
+      const marketStocks = Object.values(currentStocks).filter(s => s.market === selectedMarket);
+      let displayStocks = [];
+      let filterDesc = '';
+
+      if (keyword) {
+        displayStocks = marketStocks.filter(s =>
+          s.name.toLowerCase().includes(keyword) || s.code.toLowerCase().includes(keyword)
+        );
+        filterDesc = `'${keyword}' 검색 결과: ${displayStocks.length}개 종목`;
+      } else if (showAllStocks) {
+        displayStocks = marketStocks;
+        filterDesc = `${selectedMarket === 'KR' ? '국내' : '해외'} 전체 종목 표시 중 (${displayStocks.length}개)`;
+      } else {
+        displayStocks = randomSampleIds[selectedMarket]
+          .map(id => currentStocks[id])
+          .filter(Boolean);
+        filterDesc = `${selectedMarket === 'KR' ? '국내' : '해외'} 추천 랜덤 10개 종목 표시 중 (나머지는 검색 또는 '전체보기' 클릭)`;
+      }
+
+      document.getElementById('marketFilterInfo').innerText = filterDesc;
+      const marketBody = document.getElementById('marketStocksBody');
+
+      if (displayStocks.length === 0) {
+        marketBody.innerHTML = `
+          <tr>
+            <td colspan="5" style="text-align:center; color:var(--muted); padding:18px;">
+              조건에 맞는 종목이 없습니다.
+            </td>
+          </tr>
+        `;
+      } else {
+        marketBody.innerHTML = displayStocks.map(stock => {
+          const diff = stock.price - stock.prevPrice;
+          const priceClass = diff > 0 ? 'up' : diff < 0 ? 'down' : '';
+          const diffSign = diff > 0 ? '▲' : diff < 0 ? '▼' : '-';
+          const holding = (myUser.portfolio && myUser.portfolio[stock.id]) || { qty: 0 };
+          const marketBadge = stock.market === 'KR'
+            ? '<span class="badge-kr">국내주식</span>'
+            : '<span class="badge-us">해외주식</span>';
+
+          const prevInput = document.getElementById(`buy_qty_${stock.id}`);
+          const prevVal = prevInput ? prevInput.value : '1';
+
+          return `
+            <tr>
+              <td>${marketBadge}</td>
+              <td><strong>${stock.name}</strong> <small style="color:var(--muted);">(${stock.code})</small></td>
+              <td class="${priceClass}">${formatKRW(stock.price)} <small>(${diffSign})</small></td>
+              <td>${holding.qty > 0 ? `${holding.qty}주` : '-'}</td>
+              <td>
+                <div class="trade-controls">
+                  <input type="number" id="buy_qty_${stock.id}" class="trade-input" value="${prevVal}" min="1" />
+                  <button class="btn-buy" onclick="buyStock('${stock.id}')">매수</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // 3) 최근 거래 기록 렌더링
+      document.getElementById('historyCountLabel').innerText = `최근 ${myTradeHistory.length}건`;
+      const historyEl = document.getElementById('tradeHistoryList');
+      if (myTradeHistory.length === 0) {
+        historyEl.innerHTML = `<div style="color:var(--muted); text-align:center; padding:12px;">아직 매수/매도 거래 기록이 없습니다.</div>`;
+      } else {
+        historyEl.innerHTML = myTradeHistory.map(item => {
+          const isBuy = item.type === 'BUY';
+          const badge = isBuy
+            ? '<span style="color:var(--up); font-weight:bold;">[매수]</span>'
+            : '<span style="color:var(--down); font-weight:bold;">[매도]</span>';
+          const mLabel = item.marketName || (item.market === 'KR' ? '국내주식' : '해외주식');
+          return `
+            <div class="history-row">
+              <div>
+                ${badge} <span style="color:var(--muted);">[${mLabel}]</span>
+                <strong>${item.name}</strong> <small style="color:var(--muted);">(${item.code})</small>
+                · ${item.qty}주 @ ${formatKRW(item.price)}
+              </div>
+              <div style="color:var(--muted);">
+                합계 <strong style="color:var(--text);">${formatKRW(item.totalAmount)}</strong> · ${formatTime(item.timestamp)}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function buyStock(stockId) {
+      const input = document.getElementById(`buy_qty_${stockId}`);
+      const qty = input ? input.value : 1;
+      socket.emit('buy', { stockId, qty });
+    }
+
+    function sellStock(stockId) {
+      const input = document.getElementById(`sell_qty_${stockId}`);
+      const qty = input ? input.value : 1;
+      socket.emit('sell', { stockId, qty });
+    }
+
+    function sellAllStock(stockId, maxQty) {
+      socket.emit('sell', { stockId, qty: maxQty });
+    }
+  </script>
+</body>
+</html>
